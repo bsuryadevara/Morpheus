@@ -100,7 +100,7 @@ class CreateFeaturesRWStage(MultiMessageStage):
                 df["Name"] = df["Name"].str.lower()
 
                 # Create PID_Process feature.
-                df['PID_Process'] = df.PID + '_' + df.Process
+                df['PID_Process'] = str(df.PID) + '_' + str(df.Process)
 
                 snapshot_ids = df.snapshot_id.unique()
 

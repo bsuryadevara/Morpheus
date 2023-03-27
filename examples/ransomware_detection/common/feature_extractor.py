@@ -551,24 +551,16 @@ class FeatureExtractor():
 
             fltr_plugin_dict = self._filter_by_pid_process(plugin_dict, pid_process)
 
-            try:
-                ldrmodules_df = fltr_plugin_dict['ldrmodules']
-                threadlist_df = fltr_plugin_dict['threadlist']
-                envars_df = fltr_plugin_dict['envars']
-                vadinfo_df = fltr_plugin_dict['vadinfo']
-                handles_df = fltr_plugin_dict['handles']
-
-            except KeyError as e:
-                raise KeyError('Missing required plugins: %s' % (e))
-
             # Envars plugin features displays a process's environment variables.
             # Typically this will show the number of CPUs installed and the hardware architecture,
             # the process's current directory, temporary directory, session name, computer name, user name,
             # and various other interesting artifacts.
-            self._extract_envars(envars_df)
+            if 'envars' in self._config.interested_plugins and not fltr_plugin_dict['envars'].empty:
+                self._extract_envars(fltr_plugin_dict['envars'])
 
             # Threadlist plugin features displays the threads that are used by a process.
-            self._extract_threadlist(threadlist_df)
+            if 'threadlist' in self._config.interested_plugins and not fltr_plugin_dict['threadlist'].empty:
+                self._extract_threadlist(fltr_plugin_dict['threadlist'])
 
             # VadInfo plugin features displays extended information about a process's VAD nodes.
             # In particular, it shows:
@@ -578,16 +570,19 @@ class FeatureExtractor():
             # - The VAD flags, control flags, etc
             # - The name of the memory mapped file (if one exists)
             # - The memory protection constant (permissions)
-            self._extract_vadinfo(vadinfo_df)
+            if 'vadinfo' in self._config.interested_plugins and not fltr_plugin_dict['vadinfo'].empty:
+                self._extract_vadinfo(fltr_plugin_dict['vadinfo'])
 
             # Handles plugin features displays the open handles in a process, use the handles command.
             # This applies to files, registry keys, mutexes, named pipes, events, window stations, desktops, threads,
             # and all other types of securable executive objects.
-            self._extract_handles(handles_df)
+            if 'handles' in self._config.interested_plugins and not fltr_plugin_dict['handles'].empty:
+                self._extract_handles(fltr_plugin_dict['handles'])
 
             # LdrModules plugin features displays a process's loaded DLLs. LdrModules detects a dll-hiding or injection
             # kind of activities in a process memory.
-            self._extract_ldrmodules(ldrmodules_df)
+            if 'ldrmodules' in self._config.interested_plugins and not fltr_plugin_dict['ldrmodules'].empty:
+                self._extract_ldrmodules(fltr_plugin_dict["ldrmodules"])
 
             # Add pid_process
             self._features['pid_process'] = pid_process
@@ -601,8 +596,7 @@ class FeatureExtractor():
         # Snapshot id is used to determine which snapshot the pid_process belongs to
         features_df['snapshot_id'] = x.snapshot_id.iloc[0]
 
-        # Add timestamp. Here we consider only ldrmodules timestamp for all the entries.
-        features_df['timestamp'] = plugin_dict['ldrmodules'].timestamp.iloc[0]
+        features_df['timestamp'] = x.timestamp
 
         return features_df
 
