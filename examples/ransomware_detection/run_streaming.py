@@ -207,13 +207,13 @@ def run_pipeline(debug,
     # This stage logs the metrics (msg/sec) from the above stage.
     pipeline.add_stage(MonitorStage(config, description="Serialize rate"))
 
-    # # Add a write file stage.
-    # # This stage writes all messages to a file.
-    # pipeline.add_stage(WriteToKafkaStage(config, bootstrap_servers=bootstrap_servers, output_topic=output_topic))
+    # Add a write file stage.
+    # This stage writes all messages to a kafka topic.
+    pipeline.add_stage(WriteToKafkaStage(config, bootstrap_servers=bootstrap_servers, output_topic=output_topic))
 
-    # # Add a monitor stage.
-    # # This stage logs the metrics (msg/sec) from the above stage.
-    # pipeline.add_stage(MonitorStage(config, description="ToKafka rate"))
+    # Add a monitor stage.
+    # This stage logs the metrics (msg/sec) from the above stage.
+    pipeline.add_stage(MonitorStage(config, description="ToKafka rate"))
 
     # Run the pipeline.
     pipeline.run()
