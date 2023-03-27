@@ -111,6 +111,7 @@ class AppshieldPartitionerStage(MultiMessageStage):
                 for plugin in df_per_plugin.keys():
                     plugin_df = df_per_plugin[plugin]
                     cols_rename_dict = self._plugins_schema[plugin]["column_mapping"]
+                    # TODO (bhargav) need to double check if we want to use replace.
                     plugin_df['raw'] = plugin_df.raw.str.replace('\\', '-')
                     plugin_df = plugin_df['raw'].apply(json.loads).apply(pd.Series)
                     plugin_df = plugin_df.rename(columns=cols_rename_dict)

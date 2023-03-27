@@ -227,3 +227,6 @@ plugins_schema:
 intrested_plugins:
   - handles
   - envars
+  - threadlist
+  - ldrmodules
+  - vadinfo

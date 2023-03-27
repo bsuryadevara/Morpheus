@@ -100,7 +100,9 @@ class CreateFeaturesRWStage(MultiMessageStage):
                 df["Name"] = df["Name"].str.lower()
 
                 # Create PID_Process feature.
-                df['PID_Process'] = str(df.PID) + '_' + str(df.Process)
+                # TODO (bhargav) use this again once Process is available in all the plugins
+                # df['PID_Process'] = str(df.PID) + '_' + str(df.Process)
+                df['PID_Process'] = str(df.PID)
 
                 snapshot_ids = df.snapshot_id.unique()
 
