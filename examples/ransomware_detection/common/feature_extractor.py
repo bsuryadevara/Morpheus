@@ -594,7 +594,7 @@ class FeatureExtractor():
         features_df = pd.DataFrame.from_dict(features_per_pid_process)
 
         # Snapshot id is used to determine which snapshot the pid_process belongs to
-        features_df['snapshot_id'] = x.snapshot_id.iloc[0]
+        features_df['snapshot_id'] = x.snapshot_id
 
         features_df['timestamp'] = x.timestamp
 

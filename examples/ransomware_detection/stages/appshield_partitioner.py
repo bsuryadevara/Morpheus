@@ -30,24 +30,6 @@ from morpheus.pipeline.stream_pair import StreamPair
 
 @register_stage("appshield-partitioner", modes=[PipelineModes.FIL])
 class AppshieldPartitionerStage(MultiMessageStage):
-    """
-    This class extends MultiMessageStage to deal with scenario specific features from Appshiled plugins data.
-
-    Parameters
-    ----------
-    c : morpheus.config.Config
-        Pipeline configuration instance
-    interested_plugins : typing.List[str]
-        Only intrested plugins files will be read from Appshield snapshots
-    feature_columns : typing.List[str]
-        List of features needed to be extracted.
-    file_extns : typing.List[str]
-        File extensions.
-    n_workers: int, default = 2
-        Number of dask workers.
-    threads_per_worker: int, default = 2
-        Number of threads for each dask worker.
-    """
 
     def __init__(self,
                  c: Config,
@@ -59,6 +41,7 @@ class AppshieldPartitionerStage(MultiMessageStage):
         self._interested_plugins = interested_plugins
         self._cols_include = cols_include
         self._plugins_schema = plugins_schema
+        self._data_dict = {}
 
     @property
     def name(self) -> str:
@@ -72,6 +55,53 @@ class AppshieldPartitionerStage(MultiMessageStage):
 
     def supports_cpp_node(self):
         return False
+
+    def _check_multiple_snapshots(self):
+        multiple_snapshots = {}
+        for source_name, source_dict in self._data_dict.items():
+            if len(source_dict) > 1:
+                for snapshot_name in source_dict.keys():
+                    multiple_snapshots.setdefault(source_name, []).append(snapshot_name)
+        return multiple_snapshots
+
+    def _add_data(self, source_name, snapshot_name, plugin_name, df):
+        if source_name not in self._data_dict:
+            self._data_dict[source_name] = {}
+        source = self._data_dict[source_name]
+
+        if snapshot_name not in source:
+            source[snapshot_name] = {}
+        snapshot = source[snapshot_name]
+
+        if plugin_name not in snapshot:
+            snapshot[plugin_name] = df
+        else:
+            snapshot[plugin_name] = pd.concat([snapshot[plugin_name], df])
+
+    def _get_source_dfs(self, multiple_snapshots):
+        source_dfs = {}
+
+        for source in multiple_snapshots.keys():
+            plugin_dfs = []
+
+            max_snapshot_id = max(multiple_snapshots[source])
+            snapshot_ids = [x for x in multiple_snapshots[source] if x != max_snapshot_id]
+
+            for snapshot_id in snapshot_ids:
+                plugin_df_dict = self._data_dict[source][snapshot_id]
+
+                for plugin_name in plugin_df_dict.keys():
+                    plugin_df = AppshieldPartitionerStage.fill_interested_cols(plugin_df=plugin_df_dict[plugin_name],
+                                                                               cols_include=self._cols_include)
+                    plugin_dfs.append(plugin_df)
+
+                # Add fully recieved snapshot to processing list and removing from in memory
+                del self._data_dict[source][snapshot_id]
+
+            if plugin_dfs:
+                source_dfs[source] = pd.concat(plugin_dfs, ignore_index=True)
+
+        return source_dfs
 
     @staticmethod
     def fill_interested_cols(plugin_df: pd.DataFrame, cols_include: typing.List[str]):
@@ -94,47 +124,30 @@ class AppshieldPartitionerStage(MultiMessageStage):
                 df = x.df
 
                 df["plugin"] = df['raw'].str.extract('("type_name":"([^"]+)")')[1]
+                df["source"] = df['raw'].str.extract('("source":"([^"]+)")')[1]
+                df["snapshot_id"] = df['raw'].str.extract('("scan_id":([^"]+),)')[1].astype(int)
 
-                df_per_plugin = {}
-                for intrested_plugin in self._interested_plugins:
-                    plugin = self._plugins_schema[intrested_plugin]["name"]
-                    plugin_df = df[df.plugin == plugin]
-                    if not plugin_df.empty:
-                        df_per_plugin[intrested_plugin] = plugin_df
+                unique_sources = df.source.unique()
+                unique_snapshot_ids = df.snapshot_id.unique()
 
-                return df_per_plugin
+                for source in unique_sources:
+                    for snapshot_id in unique_snapshot_ids:
+                        for intrested_plugin in self._interested_plugins:
+                            plugin = self._plugins_schema[intrested_plugin]["name"]
+                            plugin_df = df[(df.plugin == plugin) & (df.source == source) &
+                                           (df.snapshot_id == snapshot_id)]
+                            if not plugin_df.empty:
 
-            def extract_data(df_per_plugin: typing.Dict[str, pd.DataFrame]):
+                                cols_rename_dict = self._plugins_schema[intrested_plugin]["column_mapping"]
 
-                plugin_dfs = []
+                                plugin_df['raw'] = plugin_df.raw.str.replace('\\', '-')
+                                plugin_df = plugin_df['raw'].apply(json.loads).apply(pd.Series)
+                                plugin_df = plugin_df.rename(columns=cols_rename_dict)
+                                self._add_data(source, snapshot_id, intrested_plugin, plugin_df)
 
-                for plugin in df_per_plugin.keys():
-                    plugin_df = df_per_plugin[plugin]
-                    cols_rename_dict = self._plugins_schema[plugin]["column_mapping"]
-                    # TODO (bhargav) need to double check if we want to use replace.
-                    plugin_df['raw'] = plugin_df.raw.str.replace('\\', '-')
-                    plugin_df = plugin_df['raw'].apply(json.loads).apply(pd.Series)
-                    plugin_df = plugin_df.rename(columns=cols_rename_dict)
-                    plugin_df = AppshieldPartitionerStage.fill_interested_cols(plugin_df=plugin_df,
-                                                                               cols_include=self._cols_include)
-                    plugin_dfs.append(plugin_df)
+                multiple_snapshots = self._check_multiple_snapshots()
 
-                return plugin_dfs
-
-            def batch_source_split(x: typing.List[pd.DataFrame]) -> typing.Dict[str, pd.DataFrame]:
-
-                combined_df = pd.concat(x)
-
-                # Get the sources in this DF
-                unique_sources = combined_df["source"].unique()
-
-                source_dfs = {}
-
-                if len(unique_sources) > 1:
-                    for source_name in unique_sources:
-                        source_dfs[source_name] = combined_df[combined_df["source"] == source_name]
-                else:
-                    source_dfs[unique_sources[0]] = combined_df
+                source_dfs = self._get_source_dfs(multiple_snapshots)
 
                 return source_dfs
 
@@ -150,11 +163,7 @@ class AppshieldPartitionerStage(MultiMessageStage):
 
                 return metas
 
-            input.pipe(ops.map(filter_by_plugin),
-                       ops.map(extract_data),
-                       ops.map(batch_source_split),
-                       ops.map(build_metadata),
-                       ops.flatten()).subscribe(output)
+            input.pipe(ops.map(filter_by_plugin), ops.map(build_metadata), ops.flatten()).subscribe(output)
 
         node = builder.make_node_full(self.unique_name, node_fn)
         builder.make_edge(stream, node)
