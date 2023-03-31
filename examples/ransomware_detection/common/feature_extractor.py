@@ -80,8 +80,11 @@ class FeatureExtractor():
         This function extracts environment features.
         """
 
-        x = x[x.Variable.str.contains('PATHEXT', regex=False)]
-        x = x[x.Value.str.contains(fc.FILE_EXTN_EXP, regex=False)]
+        # TODO (bhargav): Misisng Variable and Value columns.
+        var_filter = x['Variable'].notnull() & x['Variable'].str.contains('PATHEXT', regex=False)
+        val_filter = x['Value'].notnull() & x['Value'].str.contains(fc.FILE_EXTN_EXP, regex=False)
+
+        x = x[var_filter & val_filter]
 
         if not x.empty:
             self._features['envirs_pathext'] = 1
@@ -424,12 +427,16 @@ class FeatureExtractor():
         # Get count and ratio for the handles by their type.
         for t in (fc.HANDLES_TYPES + fc.HANDLES_TYPES_2):
 
-            df = x[x.Type == t[0]]
+            handle_type_filter = x["Type"].notnull() & x.Type == t[0]
+
+            df = x[handle_type_filter]
+
             df_len = len(df)
 
-            if t in fc.HANDLES_TYPES:
-                col = 'handles_df_' + t[1] + '_count'
-                self._features[col] = df_len
+            # TODO (bhargav): Need see verify if model uses this feature.
+            # if t in fc.HANDLES_TYPES:
+            #     col = 'handles_df_' + t[1] + '_count'
+            #     self._features[col] = df_len
 
             col = 'handles_df_' + t[1] + '_ratio'
             self._features[col] = df_len / (self._features['handles_df_count'] + 1)
@@ -512,7 +519,9 @@ class FeatureExtractor():
 
         if not x.empty:
             process = x.Process.iloc[0].lower()
-            x = x[x.Name.str.contains(process)]
+            # TODO (bhargav): name is none in the plugin data recieved by DOCA not sure how to handle this?
+            combined_filter = x['Name'].notnull() & x['Name'].str.contains(process)
+            x = x[combined_filter]
             if not x.empty:
                 self._features['ldrmodules_df_size_int'] = int(x.Size.iloc[0], 16)
                 self._features['ldrmodules_df_path'] = x.Path.iloc[0]
