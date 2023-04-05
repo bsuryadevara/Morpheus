@@ -603,9 +603,9 @@ class FeatureExtractor():
         features_df = pd.DataFrame.from_dict(features_per_pid_process)
 
         # Snapshot id is used to determine which snapshot the pid_process belongs to
-        features_df['snapshot_id'] = x.snapshot_id
+        features_df['snapshot_id'] = x.snapshot_id.iloc[0]
 
-        features_df['timestamp'] = x.timestamp
+        features_df['timestamp'] = x.timestamp.iloc[0]
 
         return features_df
 
@@ -624,4 +624,5 @@ class FeatureExtractor():
         pandas.DataFrame
             Ransomware features dataframe.
         """
+
         return pd.concat(x)

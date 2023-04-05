@@ -25,6 +25,7 @@ from morpheus.config import PipelineModes
 from morpheus.pipeline.linear_pipeline import LinearPipeline
 from morpheus.stages.general.monitor_stage import MonitorStage
 from morpheus.stages.inference.triton_inference_stage import TritonInferenceStage
+from morpheus.stages.input.kafka_source_stage import KafkaSourceStage
 from morpheus.stages.output.write_to_kafka_stage import WriteToKafkaStage
 from morpheus.stages.postprocess.add_scores_stage import AddScoresStage
 from morpheus.stages.postprocess.serialize_stage import SerializeStage
@@ -32,7 +33,6 @@ from morpheus.utils.logger import configure_logging
 from stages.create_features import CreateFeaturesRWStage
 from stages.preprocessing import PreprocessingRWStage
 from stages.appshield_partitioner import AppshieldPartitionerStage
-from stages.appshield_kafka_source import AppshieldKafkaSource
 
 
 @click.command()
@@ -59,6 +59,12 @@ from stages.appshield_kafka_source import AppshieldKafkaSource
 @click.option(
     "--model_max_batch_size",
     default=1024,
+    type=click.IntRange(min=1),
+    help="Max batch size to use for the model.",
+)
+@click.option(
+    "--pipeline_batch_size",
+    default=10000,
     type=click.IntRange(min=1),
     help="Max batch size to use for the model.",
 )
@@ -93,6 +99,7 @@ def run_pipeline(debug,
                  n_dask_workers,
                  threads_per_dask_worker,
                  model_max_batch_size,
+                 pipeline_batch_size,
                  conf_file,
                  model_name,
                  server_url,
@@ -117,6 +124,7 @@ def run_pipeline(debug,
     # Below properties are specified by the command line.
     config.num_threads = num_threads
     config.model_max_batch_size = model_max_batch_size
+    config.pipeline_batch_size = pipeline_batch_size
     config.feature_length = snapshot_fea_length * sliding_window
     config.class_labels = ["pred", "score"]
 
@@ -144,7 +152,7 @@ def run_pipeline(debug,
     # Set source stage.
     # This stage reads raw data from the required plugins and merge all the plugins data into a single dataframe
     # for a given source.
-    pipeline.set_source(AppshieldKafkaSource(config, bootstrap_servers=bootstrap_servers, input_topic=input_topic))
+    pipeline.set_source(KafkaSourceStage(config, bootstrap_servers=bootstrap_servers, input_topic=input_topic))
 
     # Add a monitor stage.
     # This stage logs the metrics (msg/sec) from the above stage.
