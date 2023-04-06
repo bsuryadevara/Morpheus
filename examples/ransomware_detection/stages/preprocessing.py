@@ -77,8 +77,7 @@ class PreprocessingRWStage(PreprocessBaseStage):
         for start in range(ids_len - (window - 1)):
             stop = start + window
             sequence = ids[start:stop]
-            right = list(range(min(sequence), max(sequence) + 1))
-            consecutive = sorted(sequence) == right
+            consecutive = sorted(sequence) == list(range(min(sequence), max(sequence) + 1))
             if consecutive:
                 sliding_window_offsets.append((start, stop))
 
