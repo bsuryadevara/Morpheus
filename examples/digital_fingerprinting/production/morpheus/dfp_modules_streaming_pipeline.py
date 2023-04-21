@@ -29,7 +29,7 @@ from morpheus.cli.utils import parse_log_level
 from morpheus.config import Config
 from morpheus.pipeline.pipeline import Pipeline
 from morpheus.stages.general.monitor_stage import MonitorStage
-from morpheus.stages.general.multiport_modules_stage import MultiPortModulesStage
+from morpheus.stages.general.multi_outputport_modules_stage import MultiPortModulesStage
 from morpheus.stages.input.control_message_kafka_source_stage import ControlMessageKafkaSourceStage
 
 

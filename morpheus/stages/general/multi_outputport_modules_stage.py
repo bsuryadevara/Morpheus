@@ -25,9 +25,10 @@ from morpheus.utils.module_utils import load_module
 logger = logging.getLogger(__name__)
 
 
-class MultiPortModulesStage(Stage):
+class MultiOutputportModulesStage(Stage):
     """
-    Loads an existing, registered, MRC SegmentModule and wraps it as a Morpheus Stage.
+    The function loads a pre-registered MRC SegmentModule that has single input port and mutiple output ports,
+    and then converts it into a Morpheus Stage.
 
     Parameters
     ----------
@@ -97,13 +98,13 @@ class MultiPortModulesStage(Stage):
         """
         return (typing.Any, )
 
-    def _build(self, builder: mrc.Builder, in_stream_pairs: typing.List[StreamPair]) -> typing.List[StreamPair]:
+    def _build(self, builder: mrc.Builder, in_ports_streams: typing.List[StreamPair]) -> typing.List[StreamPair]:
 
-        in_ports_len = len(in_stream_pairs)
+        in_ports_len = len(in_ports_streams)
         if in_ports_len != 1:
             raise ValueError(f"Only 1 input is supported, but recieved {in_ports_len}.")
 
-        in_stream_node = in_stream_pairs[0][0]
+        in_stream_node = in_ports_streams[0][0]
 
         # Load module from the registry.
         module = load_module(self._module_conf, builder=builder)
@@ -111,12 +112,12 @@ class MultiPortModulesStage(Stage):
 
         builder.make_edge(in_stream_node, mod_in_stream)
 
-        out_stream_pairs = []
+        out_ports_streams = []
 
         count = 0
         while (count < self._output_port_count):
-            out_port = f"{self._output_port_name_prefix}-{count}"
-            out_stream_pairs.append((module.output_port(out_port), self._ouput_type))
+            out_port = f"{self._output_port_name_prefix}_{count}"
+            out_ports_streams.append((module.output_port(out_port), self._ouput_type))
             count += 1
 
-        return out_stream_pairs
+        return out_ports_streams

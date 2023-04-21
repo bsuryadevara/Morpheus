@@ -182,6 +182,6 @@ def dfp_deployment(builder: mrc.Builder):
     builder.register_module_input("input", fsspec_dataloader_module.input_port("input"))
 
     # Register output ports for a module.
-    for i in range(num_output_ports):
+    for index in range(num_output_ports):
         # Output ports are registered in increment order.
-        builder.register_module_output(f"output-{i}", out_streams[i])
+        builder.register_module_output(f"output_{index}", out_streams[index])
