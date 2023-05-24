@@ -21,9 +21,11 @@ from io import StringIO
 import confluent_kafka as ck
 import mrc
 import pandas as pd
+import requests
+import functools
 
 import cudf
-
+from morpheus.utils.file_utils import load_yaml
 import morpheus._lib.stages as _stages
 from morpheus.cli.register_stage import register_stage
 from morpheus.config import Config
@@ -77,6 +79,10 @@ class KafkaSourceStage(PreallocatorMixin, SingleOutputSource):
         Stops ingesting after emitting `stop_after` records (rows in the dataframe). Useful for testing. Disabled if `0`
     async_commits: bool, default = True
         Enable commits to be performed asynchronously. Ignored if `disable_commit` is `True`.
+    consumer_config_file : str, default = None
+        Path to the file containing additional configuration parameters for the Kafka consumer.
+        Note:
+            Any configuration provided in this file will override the parameters passed as arguments.
     """
 
     def __init__(self,
@@ -90,7 +96,8 @@ class KafkaSourceStage(PreallocatorMixin, SingleOutputSource):
                  disable_pre_filtering: bool = False,
                  auto_offset_reset: AutoOffsetReset = AutoOffsetReset.LATEST,
                  stop_after: int = 0,
-                 async_commits: bool = True):
+                 async_commits: bool = True,
+                 extra_params_file: str = None):
         super().__init__(c)
 
         if isinstance(auto_offset_reset, AutoOffsetReset):
@@ -104,6 +111,10 @@ class KafkaSourceStage(PreallocatorMixin, SingleOutputSource):
         }
         if client_id is not None:
             self._consumer_params['client.id'] = client_id
+
+        if extra_params_file:
+            self._extra_consumer_params = load_yaml(extra_params_file)
+            self._consumer_params.update(self._extra_consumer_params)
 
         if isinstance(input_topic, str):
             input_topic = [input_topic]
@@ -144,6 +155,29 @@ class KafkaSourceStage(PreallocatorMixin, SingleOutputSource):
 
         return super().stop()
 
+    def get_token(self):
+        payload = {
+            "grant_type": self._consumer_params.get("grant_type", "client_credentials"),
+            "scope": " ".join(self._consumer_params.get("scopes", ""))
+        }
+
+        token_url = self._consumer_params.get("token_url")
+
+        if not token_url:
+            raise KeyError("Token url must be provided in the configuration if sasl_mechanism is `OAUTHBEARER`")
+
+        client_secret = self._consumer_params.get("client_secret")
+
+        if not client_secret:
+            raise KeyError("Client secret must be provided in the configuration if sasl_mechanism is `OAUTHBEARER`")
+
+        client_id = self._consumer_params['client.id']
+
+        resp = requests.post(token_url, auth=(client_id, client_secret), data=payload, timeout=1.0)
+        token = resp.json()
+
+        return token['access_token'], time.time() + float(token['expires_in'])
+
     def _process_batch(self, consumer, batch):
         message_meta = None
         if len(batch):
@@ -159,8 +193,8 @@ class KafkaSourceStage(PreallocatorMixin, SingleOutputSource):
             try:
                 buffer.seek(0)
                 df = cudf.io.read_json(buffer, engine='cudf', lines=True, orient='records')
-            except Exception as e:
-                logger.error("Error parsing payload into a dataframe : {}".format(e))
+            except Exception as exec_info:
+                logger.error("Error parsing payload into a dataframe : %s", exec_info)
             finally:
                 if (not self._disable_commit):
                     for msg in batch:
@@ -182,6 +216,9 @@ class KafkaSourceStage(PreallocatorMixin, SingleOutputSource):
     def _source_generator(self):
         consumer = None
         try:
+            if 'token_url' in self._consumer_params:
+                self._consumer_params['oauth_cb'] = functools.partial(self.get_token)
+
             consumer = ck.Consumer(self._consumer_params)
             consumer.subscribe(self._topics)
 

@@ -18,7 +18,7 @@ import re
 import typing
 from datetime import datetime
 from datetime import timezone
-
+import yaml
 import fsspec
 
 import morpheus
@@ -120,3 +120,30 @@ def date_extractor(file_object: fsspec.core.OpenFile, filename_regex: re.Pattern
         ts_object = file_object.fs.modified(file_object.path)
 
     return ts_object
+
+
+def load_yaml(file: str) -> typing.Dict[typing.Any, typing.Any]:
+    """
+    Load a YAML file and return its content as a dictionary.
+
+    Parameters
+    ----------
+    file : str
+        The path to the YAML file to load.
+
+    Returns
+    -------
+    typing.Dict[typing.Any, typing.Any]
+        The content of the YAML file as a dictionary.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the specified file cannot be found.
+    yaml.YAMLError
+        If there is an error parsing the YAML file.
+
+    """
+    with open(file, 'r', encoding='utf-8') as f:
+        content = yaml.safe_load(f)
+    return content
